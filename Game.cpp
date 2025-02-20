@@ -1,8 +1,7 @@
 #include "Game.h"
-#include <iostream>
-#include <queue>
 
-Game::Game() : window(sf::VideoMode(900, 1000), "Minesweeper") { // each cell is 40, so 40 * 22 = 880
+
+Game::Game() : window(sf::VideoMode(900, 1000), "Minesweeper"), gameOver(false), gameWon(false), bestTime(9999) { // each cell is 40, so 40 * 22 = 880
     font.loadFromFile("arial.ttf");
 }
 
@@ -20,46 +19,98 @@ void Game::processEvents() {
             window.close();
         }
 
+        // if (gameOver || gameWon) { // if we win we stop
+        //     return;
+        // }
+
         if (event.type == sf::Event::MouseButtonPressed) {
-            if (event.mouseButton.button == sf::Mouse::Left) {
-                // get the mouse position
-                std::cout << "Left click at: (" << event.mouseButton.x << ", " << event.mouseButton.y << ")" << std::endl;
-                int x = event.mouseButton.x / 40; // Cell size (40) to convert screen coordinates to grid
-                int y = event.mouseButton.y / 40; 
+            int mouseX = event.mouseButton.x;
+            int mouseY = event.mouseButton.y;
 
-                if (!firstClick) {
-                    handleFirstClick(x, y);
-                    firstClick = true;
-                }
-
-                if (!board.grid[y][x].flagged) {
-                    board.grid[y][x].reveal();
-                }
+            if (mouseX >= 375 && mouseX <= 525 && mouseY >= 920 && mouseY <= 970) {
+                restartGame();
             }
 
-            if (event.mouseButton.button == sf::Mouse::Right) {
+            if (!gameOver && !gameWon) {
                 int x = event.mouseButton.x / 40; // Cell size (40) to convert screen coordinates to grid
                 int y = event.mouseButton.y / 40; 
-                Cell& cell = board.grid[y][x];
-                if (!cell.flagged) {
-                    remainingMines--;
-                } else {
-                    remainingMines++;
-                }
-                cell.toggleFlag();
-            }    
-        
 
-            if (event.mouseButton.button == sf::Mouse::Middle) {
-                int x = event.mouseButton.x / 40; // Cell size (40) to convert screen coordinates to grid
-                int y = event.mouseButton.y / 40; 
-                handleMiddleClick(x, y);
+
+                if (event.mouseButton.button == sf::Mouse::Left) {
+                    // get the mouse position
+                    // std::cout << "Left click at: (" << event.mouseButton.x << ", " << event.mouseButton.y << ")" << std::endl;
+                    if (!firstClick) {
+                        handleFirstClick(x, y);
+                        firstClick = true;
+                    }
+
+                    if (!board.grid[y][x].flagged) {
+                        if (board.grid[y][x].isMine) {
+                            gameOver = true;
+                        } else {
+                            board.grid[y][x].reveal();
+                            checkWin();
+                        }
+                    }
+                }
+
+                if (event.mouseButton.button == sf::Mouse::Right) {
+                    Cell& cell = board.grid[y][x];
+
+                    if (!cell.flagged) {
+                        remainingMines--;
+                    } else {
+                        remainingMines++;
+                    }
+                    cell.toggleFlag();
+                }    
+            
+
+                if (event.mouseButton.button == sf::Mouse::Middle) {
+                    handleMiddleClick(x, y);
+                    
+                }
             }
         }
     }
 }
 
+void Game::checkWin() {
+    for (int y = 0; y < board.SIZE; ++y) {
+        for (int x = 0; x < board.SIZE; ++x) {
+            if (!board.grid[y][x].isMine && !board.grid[y][x].revealed) {
+                return; // remains mines in the field
+            }
+        }
+    }
+    gameWon = true;
+    int timeTaken = clock.getElapsedTime().asSeconds();
+    std::cout << "Congratulations! You won in " << timeTaken << " seconds!" << std::endl;
+    saveBestTime(timeTaken);
+}
+
+void Game::saveBestTime(int timeTaken) {
+    if (timeTaken < bestTime) {
+        bestTime = timeTaken;
+        std::ofstream outFile("best_time.txt");
+        outFile << bestTime;
+        outFile.close();
+    }
+}
+
+void Game::loadBestTime() {
+    std::ifstream inFile("best_time.txt");
+    if (inFile) {
+        inFile >> bestTime;
+        inFile.close();
+    }
+}
+
 void Game::handleFirstClick(int x, int y) {
+    if(!timerStarted) {
+        clock.restart();
+        timerStarted = true;
+    }
     firstClick = true;
     // clear board then place the bombs
     board.clearBoard();
@@ -110,17 +161,6 @@ void Game::handleFirstClick(int x, int y) {
     }
 
     floodFillReveal(x, y);
-    // reval some cells around the first click
-    // for (int dy = -1; dy <= 1; dy++) {
-    //     for (int dx = -1; dx <= 1; dx++) {
-    //         int nx = x + dx;
-    //         int ny = y + dy;
-
-    //         if (nx >= 0 && ny >= 0 && nx < board.SIZE && ny < board.SIZE) {
-    //             board.grid[ny][nx].reveal();
-    //         }
-    //     }
-    // }
 }
 
 void Game::floodFillReveal(int x, int y) {
@@ -190,6 +230,12 @@ void Game::handleMiddleClick(int x, int y) {
                         Cell& adjacentCell = board.grid[ny][nx];
                         if (!adjacentCell.revealed && !adjacentCell.flagged) {
                             adjacentCell.reveal();
+
+                            if (adjacentCell.isMine) {
+                                gameOver = true;
+                                return;
+                            }
+
                             if (adjacentCell.adjecentMines == 0) {
                                 handleMiddleClick(nx, ny);
                             }
@@ -199,6 +245,28 @@ void Game::handleMiddleClick(int x, int y) {
             }
         }
     }
+}
+
+void Game::restartGame() {
+    std::cout << "Restarting game..." << std::endl;
+    
+    board.clearBoard();
+    std::cout << "Board cleared." << std::endl;
+    
+    // if (gameOver || gameWon) {
+    //     std::cout << "hello" << std::endl;
+    //     gameOver = false;
+    //     std::cout << "hello1" << std::endl;
+    //     gameWon = false;
+    //     std::cout << "hello2" << std::endl;
+    // }
+    // remainingMines = board.MINES;  // Potential crash point
+    std::cout << "Remaining mines reset." << std::endl;
+    
+    clock.restart();  // Potential crash point
+    std::cout << "Clock restarted." << std::endl;
+
+    std::cout << "Restart completed successfully." << std::endl;
 }
 
 void Game::render() {
@@ -256,6 +324,44 @@ void Game::render() {
     mineCountText.setPosition(700,10);
     mineCountText.setFillColor(sf::Color::Black);
     window.draw(mineCountText);
+
+    // timeTaken 
+    int timeTaken = clock.getElapsedTime().asSeconds();
+    sf::Text timerText("Time: " + std::to_string(timeTaken) + "s", font, 24);
+    timerText.setPosition(50, 10);
+    timerText.setFillColor(sf::Color::Black);
+    window.draw(timerText);
+
+    //Best time
+    sf::Text bestTimeText("Best time: " + std::to_string(bestTime) + "s", font, 24);
+    bestTimeText.setPosition(300, 10);
+    bestTimeText.setFillColor(sf::Color::Black);
+    window.draw(bestTimeText);
+
+    // restart button
+    sf::RectangleShape restartButton(sf::Vector2f(150, 50));
+    restartButton.setPosition(375, 920);
+    restartButton.setFillColor(sf::Color::Blue);
+    window.draw(restartButton);
+
+    sf::Text restartText("Restart", font, 24);
+    restartText.setPosition(400, 930);
+    restartText.setFillColor(sf::Color::White);
+    window.draw(restartText);
+
+    if (gameOver) {
+        sf::Text gameOverText("Game Over!", font, 50);
+        gameOverText.setPosition(350, 450);
+        gameOverText.setFillColor(sf::Color::Red);
+        window.draw(gameOverText);
+    }
+
+    if (gameWon) {
+        sf::Text gameWonText("You won!", font, 50);
+        gameWonText.setPosition(350, 450);
+        gameWonText.setFillColor(sf::Color::Green);
+        window.draw(gameWonText);
+    }
 
     window.display();
 }
