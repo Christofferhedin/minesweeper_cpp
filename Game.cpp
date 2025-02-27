@@ -3,6 +3,7 @@
 
 Game::Game() : window(sf::VideoMode(900, 1000), "Minesweeper"), gameOver(false), gameWon(false), bestTime(9999) { // each cell is 40, so 40 * 22 = 880
     font.loadFromFile("arial.ttf");
+    loadBestTime();
 }
 
 void Game::run() {
@@ -29,46 +30,47 @@ void Game::processEvents() {
 
             if (mouseX >= 375 && mouseX <= 525 && mouseY >= 920 && mouseY <= 970) {
                 restartGame();
+                continue;
             }
 
             if (!gameOver && !gameWon) {
                 int x = event.mouseButton.x / 40; // Cell size (40) to convert screen coordinates to grid
                 int y = event.mouseButton.y / 40; 
 
+                if (x >= 0 && x < board.SIZE && y >= 0 && y < board.SIZE) {
+                    if (event.mouseButton.button == sf::Mouse::Left) {
+                        // get the mouse position
+                        // std::cout << "Left click at: (" << event.mouseButton.x << ", " << event.mouseButton.y << ")" << std::endl;
+                        if (!firstClick) {
+                            handleFirstClick(x, y);
+                            firstClick = true;
+                        }
 
-                if (event.mouseButton.button == sf::Mouse::Left) {
-                    // get the mouse position
-                    // std::cout << "Left click at: (" << event.mouseButton.x << ", " << event.mouseButton.y << ")" << std::endl;
-                    if (!firstClick) {
-                        handleFirstClick(x, y);
-                        firstClick = true;
-                    }
-
-                    if (!board.grid[y][x].flagged) {
-                        if (board.grid[y][x].isMine) {
-                            gameOver = true;
-                        } else {
-                            board.grid[y][x].reveal();
-                            checkWin();
+                        if (!board.grid[y][x].flagged) {
+                            if (board.grid[y][x].isMine) {
+                                gameOver = true;
+                            } else {
+                                board.grid[y][x].reveal();
+                                checkWin();
+                            }
                         }
                     }
-                }
 
-                if (event.mouseButton.button == sf::Mouse::Right) {
-                    Cell& cell = board.grid[y][x];
+                    if (event.mouseButton.button == sf::Mouse::Right) {
+                        Cell& cell = board.grid[y][x];
 
-                    if (!cell.flagged) {
-                        remainingMines--;
-                    } else {
-                        remainingMines++;
-                    }
-                    cell.toggleFlag();
-                }    
+                        if (!cell.flagged) {
+                            remainingMines--;
+                        } else {
+                            remainingMines++;
+                        }
+                        cell.toggleFlag();
+                    }    
             
 
-                if (event.mouseButton.button == sf::Mouse::Middle) {
-                    handleMiddleClick(x, y);
-                    
+                    if (event.mouseButton.button == sf::Mouse::Middle) {
+                        handleMiddleClick(x, y);
+                    }
                 }
             }
         }
@@ -93,8 +95,13 @@ void Game::saveBestTime(int timeTaken) {
     if (timeTaken < bestTime) {
         bestTime = timeTaken;
         std::ofstream outFile("best_time.txt");
-        outFile << bestTime;
-        outFile.close();
+        if (outFile.is_open()) {
+            outFile << bestTime;
+            outFile.close();
+        } else {
+            std::cerr << "Failed to save best time to file!" << std::endl;
+        }
+
     }
 }
 
@@ -103,6 +110,9 @@ void Game::loadBestTime() {
     if (inFile) {
         inFile >> bestTime;
         inFile.close();
+    } else {
+        std::cerr << "Failed to load best time from file! Using default value (9999s)." << std::endl;
+        bestTime = 9999;
     }
 }
 
@@ -195,39 +205,49 @@ void Game::floodFillReveal(int x, int y) {
 
 void Game::handleMiddleClick(int x, int y) {
     Cell& cell = board.grid[y][x];
+
     // only allow middle-click if the cell has been revealed and shows a number
-    if (cell.revealed && cell.adjecentMines > 0) {
-        int flagcount = 0;
+    if (!cell.revealed || cell.adjecentMines == 0) {
+        return;
+    }
+
+    int flagCount = 0;
         
         // count how many adjecent cell are flagged
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                if (dx == 0 && dy == 0) {
-                    continue;
-                }
-                int nx = x + dx;
-                int ny = y + dy;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) {
+                continue;
+            }
+            int nx = x + dx;
+            int ny = y + dy;
 
-                if (nx >= 0 && nx < board.SIZE && ny >= 0 && ny < board.SIZE) {
-                    if (board.grid[ny][nx].flagged) {
-                        flagcount++;
-                    }
+            if (nx >= 0 && nx < board.SIZE && ny >= 0 && ny < board.SIZE) {
+                if (board.grid[ny][nx].flagged) {
+                    flagCount++;
                 }
             }
         }
+    }
 
-        // if the number of flagged cells around the current cell matches the adjacent mines number, then reveal the rest
-        if (flagcount == cell.adjecentMines) {
+    // if the number of flagged cells around the current cell matches the adjacent mines number, then reveal the rest
+    if (flagCount == cell.adjecentMines) {
+        std::queue<std::pair<int, int>> toReveal;
+        toReveal.push({x, y});
+
+        while (!toReveal.empty()) {
+            auto [cx, cy] = toReveal.front();
+            toReveal.pop();
+
             for (int dy = -1; dy <= 1; dy++) {
                 for(int dx = -1; dx <= 1; dx++) {
-                    if (dx == 0 && dy == 0) {
-                        continue;
-                    }
-                    int nx = x + dx;
-                    int ny = y + dy;
+
+                    int nx = cx + dx;
+                    int ny = cy + dy;
 
                     if (nx >= 0 && nx < board.SIZE && ny >= 0 && ny < board.SIZE) {
                         Cell& adjacentCell = board.grid[ny][nx];
+
                         if (!adjacentCell.revealed && !adjacentCell.flagged) {
                             adjacentCell.reveal();
 
@@ -235,9 +255,8 @@ void Game::handleMiddleClick(int x, int y) {
                                 gameOver = true;
                                 return;
                             }
-
                             if (adjacentCell.adjecentMines == 0) {
-                                handleMiddleClick(nx, ny);
+                                toReveal.push({nx, ny});
                             }
                         }
                     }
@@ -250,18 +269,15 @@ void Game::handleMiddleClick(int x, int y) {
 void Game::restartGame() {
     std::cout << "Restarting game..." << std::endl;
     
+    gameOver = false;
+    gameWon = false;
+    firstClick = false;
+    timerStarted = false;
     board.clearBoard();
-    std::cout << "Board cleared." << std::endl;
-    
-    // if (gameOver || gameWon) {
-    //     std::cout << "hello" << std::endl;
-    //     gameOver = false;
-    //     std::cout << "hello1" << std::endl;
-    //     gameWon = false;
-    //     std::cout << "hello2" << std::endl;
-    // }
-    // remainingMines = board.MINES;  // Potential crash point
-    std::cout << "Remaining mines reset." << std::endl;
+    board.generateMines();
+    board.calculateAdjacentMines();
+    remainingMines = board.MINES;
+
     
     clock.restart();  // Potential crash point
     std::cout << "Clock restarted." << std::endl;
@@ -321,20 +337,20 @@ void Game::render() {
     }
     // display remaining mines in top right corner
     sf::Text mineCountText("Mines Left: " + std::to_string(remainingMines), font, 24);
-    mineCountText.setPosition(700,10);
+    mineCountText.setPosition(500,880);
     mineCountText.setFillColor(sf::Color::Black);
     window.draw(mineCountText);
 
     // timeTaken 
     int timeTaken = clock.getElapsedTime().asSeconds();
     sf::Text timerText("Time: " + std::to_string(timeTaken) + "s", font, 24);
-    timerText.setPosition(50, 10);
+    timerText.setPosition(50, 880);
     timerText.setFillColor(sf::Color::Black);
     window.draw(timerText);
 
     //Best time
     sf::Text bestTimeText("Best time: " + std::to_string(bestTime) + "s", font, 24);
-    bestTimeText.setPosition(300, 10);
+    bestTimeText.setPosition(250, 880);
     bestTimeText.setFillColor(sf::Color::Black);
     window.draw(bestTimeText);
 

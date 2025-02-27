@@ -7,7 +7,7 @@ Board::Board() {
     for (int y = 0; y < SIZE; y++) {
         std::vector<Cell> row;
         for (int x = 0; x < SIZE; x++) {
-            row.emplace_back(x, y); // ???
+            row.emplace_back(x, y); // initilaize each cell
         }
         grid.push_back(row);
     }
@@ -16,7 +16,7 @@ Board::Board() {
 }
 
 void Board::generateMines() {
-    srand(time(nullptr)); // ???
+    srand(time(nullptr)); // Seed random number generator
     int placed = 0;
     while (placed < MINES) {
         int x = rand() % SIZE;
@@ -27,7 +27,6 @@ void Board::generateMines() {
             placed++;
         }
     }
-    
 }
 
 void Board::calculateAdjacentMines() {
@@ -36,13 +35,13 @@ void Board::calculateAdjacentMines() {
             if(grid[y][x].isMine) {
                 continue;
             }
-            int count = 0; // ???
-            for(int dy = -1; dy <= 1; dy++) {// ???
-                for(int dx = -1; dx <= 1; dx++) {// ???
-                    int nx = x + dx;// ???
-                    int ny = y + dy;// ???
-                    if (nx >= 0 && ny >= 0 && nx < SIZE && ny < SIZE && grid[ny][nx].isMine) {// ???
-                        count++;// ???
+            int count = 0; 
+            for(int dy = -1; dy <= 1; dy++) {
+                for(int dx = -1; dx <= 1; dx++) {
+                    int nx = x + dx;
+                    int ny = y + dy;
+                    if (nx >= 0 && ny >= 0 && nx < SIZE && ny < SIZE && grid[ny][nx].isMine) {
+                        count++;
                     }
                 }
             }
